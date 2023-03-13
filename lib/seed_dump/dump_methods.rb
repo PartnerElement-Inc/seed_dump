@@ -39,9 +39,13 @@ class SeedDump
               when BigDecimal, IPAddr
                 value.to_s
               when Date, Time, DateTime
-                value.to_s(:db)
+                # borrowed from https://github.com/rroblak/seed_dump/pull/161
+                value.respond_to?(:to_fs) ? value.to_fs(:db) : value.to_s(:db)
               when Range
                 range_to_string(value)
+              # borrowed from PR https://github.com/rroblak/seed_dump/pull/73
+              when ActiveSupport::HashWithIndifferentAccess
+                return "#{value.to_s}.with_indifferent_access"
               when ->(v) { v.class.ancestors.map(&:to_s).include?('RGeo::Feature::Instance') }
                 value.to_s
               else
@@ -70,7 +74,8 @@ class SeedDump
     def write_records_to_io(records, io, options)
       options[:exclude] ||= [:id, :created_at, :updated_at]
 
-      method = options[:import] ? 'import' : 'create!'
+      # borrowed from PR https://github.com/rroblak/seed_dump/pull/140
+      method = options[:import] ? 'import_without_validations_or_callbacks' : 'create!'
       io.write("#{model_for(records)}.#{method}(")
       if options[:import]
         io.write("[#{attribute_names(records, options).map {|name| name.to_sym.inspect}.join(', ')}], ")

@@ -1,13 +1,51 @@
+require 'tsort'
+
 class SeedDump
   module Environment
 
     def dump_using_environment(env = {})
       Rails.application.eager_load!
 
-      models = retrieve_models(env) - retrieve_models_exclude(env)
-
       limit = retrieve_limit_value(env)
       append = retrieve_append_value(env)
+
+      models = retrieve_models(env) - retrieve_models_exclude(env)
+
+      #
+      # Borrowed from PR: https://github.com/rroblak/seed_dump/pull/101
+
+      # Eliminate HABTM models that have the same underlying table; otherwise
+      # they'll be dumped twice, once in each direction. Probably should apply
+      # to all models, but it's possible there are edge cases in which this
+      # is not the right behavior.
+      habtm, non_habtm = models.partition {|m| m.name =~ /^HABTM_/}
+      models = non_habtm + habtm.uniq { |m| m.table_name }
+
+
+      # Borrowed from PR: https://github.com/rroblak/seed_dump/
+      #
+      # Sort models in dependency order to accommodate foreign key checks or validations.
+      # Based on code by Ryan Stenberg
+      # https://www.viget.com/articles/identifying-foreign-key-dependencies-from-activerecordbase-classes
+
+      dependencies = models.map do |model|
+        associations = model.reflect_on_all_associations(:belongs_to)
+        referents = associations.map do |association|
+          if association.options[:polymorphic]
+            ActiveRecord::Base.descendants.select do |other_model|
+              other_model.reflect_on_all_associations(:has_many).any? do |has_many_association|
+                has_many_association.options[:as] == association.name
+              end
+            end
+          else
+            association.klass
+          end
+        end
+        [ model, referents.flatten ]
+      end
+
+      models = TSortableHash[*dependencies.flatten(1)].tsort
+
       models.each do |model|
         model = model.limit(limit) if limit.present?
 
@@ -134,6 +172,23 @@ class SeedDump
     # Internal: Parses a Boolean from the given value.
     def parse_boolean_value(value)
       value.to_s.downcase == 'true'
+    end
+
+    # Borrowed from PR: https://github.com/rroblak/seed_dump/
+    #
+    class TSortableHash < Hash
+      include TSort
+
+      alias tsort_each_node each_key
+
+      def tsort_each_child(node, &block)
+        # Empty Models are filtered in *retrieve_models* method, which would occur
+        # a dump here, as it is not mentioned in keys here.
+        # But the empty model can safely be ignored, as long as it doesn't have any records.
+        return unless keys.include?(node)
+
+        fetch(node).each(&block)
+      end
     end
   end
 end

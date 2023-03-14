@@ -122,6 +122,8 @@ Options are common to both the Rake task and the console, except where noted.
 
 `import`: If `true`, output will be in the format needed by the [activerecord-import](https://github.com/zdennis/activerecord-import) gem, rather than the default format. Default: `false`.
 
+`import_method`: Only relevant if `import` is not used! By default the creation instructions are generated with `Model.create!`. There will be reasons like validations, speed, etc. why this won't fit the users needs. so with the IMPORT_METHOD an alternative method name (like `insert_all!` or `upsert_all!`) can be chosen. Example: `rake db:seed:dump IMPORT_METHOD=upsert_all!`
+
 `limit`: Dump no more than this amount of data. Default: no limit. Rake task only. In the console just pass in an ActiveRecord::Relation with the appropriate limit (e.g. `SeedDump.dump(User.limit(5))`).
 
 `conditions`: Dump only specific records. In the console just pass in an ActiveRecord::Relation with the appropriate conditions (e.g. `SeedDump.dump(User.where(state: :active))`).

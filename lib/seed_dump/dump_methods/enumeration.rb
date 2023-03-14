@@ -15,6 +15,7 @@ class SeedDump
         (1..num_of_batches).each do |batch_number|
 
           record_strings = []
+          record_attachment_strings = []
 
           last_batch = (batch_number == num_of_batches)
 
@@ -26,10 +27,10 @@ class SeedDump
 
           # Loop through the records of the current batch
           records.offset((batch_number - 1) * batch_size).limit(cur_batch_size).each do |record|
-            record_strings << dump_record(record, options)
+            record_strings << dump_record(record, options, record_attachment_strings)
           end
 
-          yield record_strings, last_batch
+          yield record_strings, last_batch, record_attachment_strings
         end
       end
 
@@ -37,16 +38,17 @@ class SeedDump
         num_of_batches, batch_size = batch_params_from(records, options)
 
         record_strings = []
+        record_attachment_strings = []
 
         batch_number = 1
 
         records.each_with_index do |record, i|
-          record_strings << dump_record(record, options)
+          record_strings << dump_record(record, options, record_attachment_strings)
 
           last_batch = (i == records.length - 1)
 
           if (record_strings.length == batch_size) || last_batch
-            yield record_strings, last_batch
+            yield record_strings, last_batch, record_attachment_strings
 
             record_strings = []
             batch_number += 1

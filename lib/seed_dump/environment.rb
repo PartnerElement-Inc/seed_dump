@@ -41,7 +41,7 @@ class SeedDump
             association.klass
           end
         end
-        [ model, referents.flatten ]
+        [ model, referents.flatten.select { |m| models.include?(m) } ]
       end
 
       models = TSortableHash[*dependencies.flatten(1)].tsort
@@ -54,7 +54,8 @@ class SeedDump
                       batch_size: retrieve_batch_size_value(env),
                       exclude: retrieve_exclude_value(env),
                       file: retrieve_file_value(env),
-                      import: retrieve_import_value(env))
+                      import: retrieve_import_value(env),
+                      import_method: retrieve_import_method_value(env))
 
         append = true # Always append for every model after the first
                       # (append for the first model is determined by
@@ -128,6 +129,10 @@ class SeedDump
     # false if  no value exists.
     def retrieve_import_value(env)
       parse_boolean_value(env['IMPORT'])
+    end
+
+    def retrieve_import_method_value(env)
+      env['IMPORT_METHOD'].presence || 'create!'  # insert_all! || upsert_all!
     end
 
     # Internal: Retrieves an Array of Class constants parsed from the value for

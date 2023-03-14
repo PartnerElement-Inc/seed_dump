@@ -15,13 +15,35 @@ class SeedDump
 
     private
 
-    def dump_record(record, options)
+    def dump_record(record, options, record_attachment_strings = nil)
       attribute_strings = []
+
+      # Also dump local ActiveStorage::Blob to a file
+      if record.is_a?(ActiveStorage::Blob) && record.service_name == 'local'
+        # export the blob to a file
+
+        attachments_path = "#{File.dirname(retrieve_file_value(ENV))}/#{ENV['AS_ATTACHMENTS_FOLDER_NAME'] || 'attachments'}"
+
+        # create attachments folder if it doesn't exist
+        FileUtils.mkdir_p(attachments_path)
+
+        File.open("#{attachments_path}/#{record.id}", "wb") do |f|
+          f << record.download
+        end
+
+        if record_attachment_strings
+          record_attachment_strings << "File.open(__dir__ + '/#{ENV['AS_ATTACHMENTS_FOLDER_NAME'] || 'attachments'}/#{record.id}') { |f| #{record.model_name.name}.find(#{record.id}).upload(f) }"
+        end
+
+        record
+      end
 
       # We select only string attribute names to avoid conflict
       # with the composite_primary_keys gem (it returns composite
       # primary key attribute names as hashes).
-      record.attributes.select {|key| key.is_a?(String) || key.is_a?(Symbol) }.each do |attribute, value|
+      attributes_whitelist = attribute_names_for(record.class)
+
+      record.attributes.select { |key| key.in?(attributes_whitelist) && (key.is_a?(String) || key.is_a?(Symbol)) }.each do |attribute, value|
         attribute_strings << dump_attribute_new(attribute, value, options) unless options[:exclude].include?(attribute.to_sym)
       end
 
@@ -34,7 +56,9 @@ class SeedDump
       options[:import] ? value_to_s(value) : "#{attribute}: #{value_to_s(value)}"
     end
 
-    def value_to_s(value)
+    def value_to_s(value, recursive_call: false)
+      should_inspect = true
+
       value = case value
               when BigDecimal, IPAddr
                 value.to_s
@@ -48,11 +72,36 @@ class SeedDump
                 return "#{value.to_s}.with_indifferent_access"
               when ->(v) { v.class.ancestors.map(&:to_s).include?('RGeo::Feature::Instance') }
                 value.to_s
-              else
+              when Array
+                should_inspect = false
+
+                value.map { |v|
+                  value_to_s(v, recursive_call: true)
+                }
+              when ActionText::Content
+                value.to_s # needs to be transferred as a string before the inspect will be called
+              when Hash
+                should_inspect = false
+
+                Hash[value.map { |k, v|
+                  [k, value_to_s(v, recursive_call: true)]
+                }]
+
+              when String
+                should_inspect = !recursive_call
                 value
+              else
+                if value.class.respond_to?(:attr_json_config)
+                  should_inspect = false
+
+                  # for serialized objects with attr_json gem, serialize the value correctly for later import
+                  { 'type' => value.model_name.name }.merge(value.instance_variable_get(:@attributes))
+                else
+                  value
+                end
               end
 
-      value.inspect
+      should_inspect ? value.inspect : value
     end
 
     def range_to_string(object)
@@ -75,7 +124,7 @@ class SeedDump
       options[:exclude] ||= [:id, :created_at, :updated_at]
 
       # borrowed from PR https://github.com/rroblak/seed_dump/pull/140
-      method = options[:import] ? 'import_without_validations_or_callbacks' : 'create!'
+      method = options[:import] ? 'import_without_validations_or_callbacks' : options[:import_method] # { create! (default) | insert_all! | upsert_all! }
       io.write("#{model_for(records)}.#{method}(")
       if options[:import]
         io.write("[#{attribute_names(records, options).map {|name| name.to_sym.inspect}.join(', ')}], ")
@@ -88,13 +137,21 @@ class SeedDump
                              :enumerable_enumeration
                            end
 
-      send(enumeration_method, records, io, options) do |record_strings, last_batch|
+      collected_attachment_strings = []
+
+      send(enumeration_method, records, io, options) do |record_strings, last_batch, record_attachment_strings|
         io.write(record_strings.join(",\n  "))
+
+        collected_attachment_strings += record_attachment_strings if record_attachment_strings&.any?
 
         io.write(",\n  ") unless last_batch
       end
 
       io.write("\n]#{active_record_import_options(options)})\n")
+
+      if collected_attachment_strings&.any?
+        io.write("\n#{collected_attachment_strings.join("\n")}\n\n")
+      end
 
       if options[:file].present?
         nil
@@ -112,12 +169,21 @@ class SeedDump
 
     def attribute_names(records, options)
       attribute_names = if records.is_a?(ActiveRecord::Relation) || records.is_a?(Class)
-                          records.attribute_names
+                          attribute_names_for(records)
                         else
                           records[0].attribute_names
                         end
 
       attribute_names.select {|name| !options[:exclude].include?(name.to_sym)}
+    end
+
+    def attribute_names_for(base)
+      base.attribute_types.map { |attr_name, type|
+        case type.class.to_s
+        when /^Active/, 'AttrJson::Type::ContainerAttribute'
+          attr_name
+        end
+      }.compact
     end
 
     def model_for(records)

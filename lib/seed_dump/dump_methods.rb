@@ -95,7 +95,7 @@ class SeedDump
                   should_inspect = false
 
                   # for serialized objects with attr_json gem, serialize the value correctly for later import
-                  { 'type' => value.model_name.name }.merge(value.instance_variable_get(:@attributes))
+                  { 'type' => value.model_name.name }.merge(value_to_s(value.instance_variable_get(:@attributes), recursive_call: true))
                 else
                   value
                 end

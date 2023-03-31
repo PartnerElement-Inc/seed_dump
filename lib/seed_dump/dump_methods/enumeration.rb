@@ -4,7 +4,7 @@ class SeedDump
       def active_record_enumeration(records, io, options)
         # If the records don't already have an order,
         # order them by primary key ascending.
-        if !records.respond_to?(:arel) || records.arel.orders.blank?
+        if records.respond_to?(:arel) && records.arel.orders.blank?
           # Borrowed PR https://github.com/rroblak/seed_dump/pull/160
           records.order(Arel.sql("#{records.quoted_table_name}.#{records.quoted_primary_key} ASC"))
         end

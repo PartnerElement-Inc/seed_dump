@@ -1,14 +1,14 @@
 # -*- encoding: utf-8 -*-
-# stub: seed_dump 3.3.2 ruby lib
+# stub: seed_dump 3.3.3 ruby lib
 
 Gem::Specification.new do |s|
   s.name = "seed_dump".freeze
-  s.version = "3.3.2"
+  s.version = "3.3.3"
 
   s.required_rubygems_version = Gem::Requirement.new(">= 0".freeze) if s.respond_to? :required_rubygems_version=
   s.require_paths = ["lib".freeze]
-  s.authors = ["Rob Halff".freeze, "Ryan Oblak".freeze]
-  s.date = "2018-05-08"
+  s.authors = ["Rob Halff".freeze, "Ryan Oblak".freeze, "Gui Carvalho".freeze]
+  s.date = "2023-05-08"
   s.description = "Dump (parts) of your database to db/seeds.rb to get a headstart creating a meaningful seeds.rb file".freeze
   s.email = "rroblak@gmail.com".freeze
   s.extra_rdoc_files = ["README.md".freeze]

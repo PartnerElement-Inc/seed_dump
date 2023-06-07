@@ -155,7 +155,7 @@ class SeedDump
       end
 
       # Increment the model's primary key sequence to the maximum value of the primary key column.
-      if ActiveRecord::Base.connection.adapter_name == 'PostgreSQL' && options[:skip_sql_commands] != true
+      if ActiveRecord::Base.connection.adapter_name == 'PostgreSQL' && options[:skip_sql_commands].blank?
         io.write("\nhighest_nr_array = ActiveRecord::Base.connection.execute(\"SELECT \#{#{model_name}.primary_key} FROM \#{#{model_name}.table_name} ORDER BY \#{#{model_name}.primary_key} DESC LIMIT 1\")")
         io.write("\nhighest_nr_array.any? && ActiveRecord::Base.connection.execute(\"ALTER SEQUENCE \#{#{model_name}.table_name}_id_seq  RESTART WITH \#{highest_nr_array.first.values.first + 1} \")\n\n")
       end
